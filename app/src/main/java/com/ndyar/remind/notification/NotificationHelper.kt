@@ -39,6 +39,17 @@ class NotificationHelper(private val context: Context) {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        val completeIntent = Intent(context, ReminderReceiver::class.java).apply {
+            action = "ACTION_COMPLETE"
+            putExtra("id", reminderId)
+        }
+        val completePendingIntent = PendingIntent.getBroadcast(
+            context,
+            reminderId + 10000,
+            completeIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentTitle(title)
@@ -47,6 +58,11 @@ class NotificationHelper(private val context: Context) {
             .setAutoCancel(!isPermanent)
             .setOngoing(isPermanent)
             .setContentIntent(pendingIntent)
+            .addAction(
+                android.R.drawable.ic_menu_send,
+                "Selesai",
+                completePendingIntent
+            )
             .build()
 
         notificationManager.notify(reminderId, notification)

@@ -49,13 +49,7 @@ fun AddReminderDialog(
         }
     }
     
-    // Notification Time Date state
-    val datePickerState = rememberDatePickerState(
-        initialSelectedDateMillis = calendar.timeInMillis
-    )
-    var showDatePicker by remember { mutableStateOf(false) }
-    
-    // Notification Time Time state
+    // Notification Time Time state (Time only)
     var selectedHour by remember { mutableStateOf(calendar.get(Calendar.HOUR_OF_DAY)) }
     var selectedMinute by remember { mutableStateOf(calendar.get(Calendar.MINUTE)) }
     
@@ -67,12 +61,12 @@ fun AddReminderDialog(
     var showTimePicker by remember { mutableStateOf(false) }
 
     // Deadline Logic
-    var hasDeadline by remember { mutableStateOf(reminder?.deadlineTime != null) }
+    var hasDeadline by remember { mutableStateOf(reminder?.deadlineTime != null || reminder == null) }
     val deadlineCalendar = remember {
         Calendar.getInstance().apply {
             reminder?.deadlineTime?.let { timeInMillis = it } ?: run {
-                // Default to 1 hour after notification time if new
-                timeInMillis = calendar.timeInMillis + 3600000 
+                // Default to 1 week (7 days) after notification time if new
+                timeInMillis = calendar.timeInMillis + (7L * 24 * 60 * 60 * 1000L)
             }
         }
     }
@@ -91,22 +85,10 @@ fun AddReminderDialog(
     )
     var showDeadlineTimePicker by remember { mutableStateOf(false) }
 
-    // Date Picker Dialog
-    if (showDatePicker) {
-        DatePickerDialog(
-            onDismissRequest = { showDatePicker = false },
-            confirmButton = {
-                TextButton(onClick = { showDatePicker = false }) { Text("OK") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDatePicker = false }) { Text("Cancel") }
-            }
-        ) {
-            DatePicker(state = datePickerState)
-        }
-    }
+    val dateFormat = remember { SimpleDateFormat("dd MMM yyyy", Locale.getDefault()) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
 
-    // Time Picker Dialog
+    // Time Picker Dialog for Notification
     if (showTimePicker) {
         AlertDialog(
             onDismissRequest = { showTimePicker = false },
@@ -162,38 +144,22 @@ fun AddReminderDialog(
         title = { Text(text = if (reminder == null) "Add New Reminder" else "Edit Reminder") },
         text = {
             Column {
-                OutlinedTextField(
-                    value = title,
-                    onValueChange = { title = it },
-                    label = { Text("Title") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = description,
-                    onValueChange = { description = it },
-                    label = { Text("Description") },
-                    modifier = Modifier.fillMaxWidth()
+                ReminderTextFields(
+                    title = title,
+                    onTitleChange = { title = it },
+                    description = description,
+                    onDescriptionChange = { description = it }
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 
-                Text(text = "Notification Time", style = MaterialTheme.typography.labelLarge)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    TextButton(
-                        onClick = { showDatePicker = true },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        val date = Date(datePickerState.selectedDateMillis ?: System.currentTimeMillis())
-                        val formattedDate = SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(date)
-                        Text(text = formattedDate)
-                    }
-                    TextButton(
-                        onClick = { showTimePicker = true },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        val formattedTime = String.format("%02d:%02d", selectedHour, selectedMinute)
-                        Text(text = formattedTime)
-                    }
+                Text(text = "Notification Time (Jam)", style = MaterialTheme.typography.labelLarge)
+                Spacer(modifier = Modifier.height(4.dp))
+                TextButton(
+                    onClick = { showTimePicker = true },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    val formattedTime = String.format(Locale.getDefault(), "%02d:%02d", selectedHour, selectedMinute)
+                    Text(text = formattedTime, style = MaterialTheme.typography.titleMedium)
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
@@ -209,17 +175,25 @@ fun AddReminderDialog(
                             modifier = Modifier.weight(1f)
                         ) {
                             val date = Date(deadlineDatePickerState.selectedDateMillis ?: System.currentTimeMillis())
-                            val formattedDate = SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(date)
-                            Text(text = formattedDate)
+                            Text(text = dateFormat.format(date))
                         }
                         TextButton(
                             onClick = { showDeadlineTimePicker = true },
                             modifier = Modifier.weight(1f)
                         ) {
-                            val formattedTime = String.format("%02d:%02d", selectedDeadlineHour, selectedDeadlineMinute)
+                            val formattedTime = String.format(Locale.getDefault(), "%02d:%02d", selectedDeadlineHour, selectedDeadlineMinute)
                             Text(text = formattedTime)
                         }
                     }
+                }
+
+                errorMessage?.let { error ->
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = error,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
                 }
             }
         },
@@ -227,19 +201,14 @@ fun AddReminderDialog(
             Button(
                 onClick = {
                     if (title.isNotEmpty()) {
-                        val selectedDateMillis = datePickerState.selectedDateMillis ?: System.currentTimeMillis()
-                        val utcCalendar = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
-                            timeInMillis = selectedDateMillis
-                        }
                         val finalCalendar = Calendar.getInstance().apply {
-                            set(Calendar.YEAR, utcCalendar.get(Calendar.YEAR))
-                            set(Calendar.MONTH, utcCalendar.get(Calendar.MONTH))
-                            set(Calendar.DAY_OF_MONTH, utcCalendar.get(Calendar.DAY_OF_MONTH))
+                            reminder?.let { timeInMillis = it.time }
                             set(Calendar.HOUR_OF_DAY, selectedHour)
                             set(Calendar.MINUTE, selectedMinute)
                             set(Calendar.SECOND, 0)
                             set(Calendar.MILLISECOND, 0)
                         }
+                        val notificationTime = finalCalendar.timeInMillis
 
                         var deadlineTime: Long? = null
                         if (hasDeadline) {
@@ -257,9 +226,15 @@ fun AddReminderDialog(
                                 set(Calendar.MILLISECOND, 0)
                             }
                             deadlineTime = finalDeadlineCalendar.timeInMillis
+
+                            if (deadlineTime < notificationTime) {
+                                errorMessage = "Deadline tidak boleh sebelum waktu notifikasi!"
+                                return@Button
+                            }
                         }
                         
-                        onConfirm(title, description, finalCalendar.timeInMillis, deadlineTime)
+                        errorMessage = null
+                        onConfirm(title, description, notificationTime, deadlineTime)
                     }
                 }
             ) {
@@ -272,4 +247,28 @@ fun AddReminderDialog(
             }
         }
     )
+}
+
+@Composable
+fun ReminderTextFields(
+    title: String,
+    onTitleChange: (String) -> Unit,
+    description: String,
+    onDescriptionChange: (String) -> Unit
+) {
+    Column {
+        OutlinedTextField(
+            value = title,
+            onValueChange = onTitleChange,
+            label = { Text("Title") },
+            modifier = Modifier.fillMaxWidth()
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        OutlinedTextField(
+            value = description,
+            onValueChange = onDescriptionChange,
+            label = { Text("Description") },
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
 }

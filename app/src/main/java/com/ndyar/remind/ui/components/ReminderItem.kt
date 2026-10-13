@@ -1,6 +1,8 @@
 package com.ndyar.remind.ui.components
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -18,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import com.ndyar.remind.model.Reminder
 
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Icon
@@ -32,15 +35,18 @@ fun ReminderItem(
     reminder: Reminder,
     onCheckedChange: (Boolean) -> Unit,
     onEditClick: () -> Unit,
+    onDeleteClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val deadlineToCompare = reminder.deadlineTime ?: reminder.time
     val isMissed = deadlineToCompare < System.currentTimeMillis() && !reminder.isCompleted
     
-    val timeFormatter = remember { SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault()) }
+    val timeFormatter = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
+    val deadlineFormatter = remember { SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault()) }
+    
     val formattedTime = remember(reminder.time) { timeFormatter.format(Date(reminder.time)) }
     val formattedDeadline = remember(reminder.deadlineTime) { 
-        reminder.deadlineTime?.let { timeFormatter.format(Date(it)) }
+        reminder.deadlineTime?.let { deadlineFormatter.format(Date(it)) }
     }
 
     Card(
@@ -61,7 +67,7 @@ fun ReminderItem(
             Column(
                 modifier = Modifier
                     .weight(1f)
-                    .padding(horizontal = 16.dp)
+                    .padding(horizontal = 12.dp)
             ) {
                 Text(
                     text = reminder.title,
@@ -76,33 +82,32 @@ fun ReminderItem(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(6.dp))
                 
-                Column {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    Text(
+                        text = "Notify: $formattedTime",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    if (reminder.isDaily) {
                         Text(
-                            text = "Notify: $formattedTime",
+                            text = "• Daily",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary
+                            color = MaterialTheme.colorScheme.secondary
                         )
-                        if (reminder.isDaily) {
-                            Spacer(modifier = Modifier.padding(horizontal = 2.dp))
-                            Text(
-                                text = " • Daily",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.secondary
-                            )
-                        }
-                        if (reminder.isPermanent) {
-                            Spacer(modifier = Modifier.padding(horizontal = 2.dp))
-                            Text(
-                                text = " • Permanent",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.tertiary
-                            )
-                        }
                     }
-                    
+                    if (reminder.isPermanent) {
+                        Text(
+                            text = "• Permanent",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.tertiary
+                        )
+                    }
                     if (formattedDeadline != null && reminder.deadlineTime != reminder.time) {
                         Text(
                             text = "Deadline: $formattedDeadline",
@@ -126,12 +131,19 @@ fun ReminderItem(
                     tint = MaterialTheme.colorScheme.outline
                 )
             }
+            IconButton(onClick = onDeleteClick) {
+                Icon(
+                    imageVector = Icons.Default.Delete,
+                    contentDescription = "Delete Reminder",
+                    tint = MaterialTheme.colorScheme.error
+                )
+            }
             if (isMissed) {
                 Text(
                     text = "!",
                     color = Color.Red,
                     style = MaterialTheme.typography.headlineSmall,
-                    modifier = Modifier.padding(start = 8.dp)
+                    modifier = Modifier.padding(start = 4.dp)
                 )
             }
         }

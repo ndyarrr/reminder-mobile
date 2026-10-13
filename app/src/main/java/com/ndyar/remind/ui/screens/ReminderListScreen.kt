@@ -1,5 +1,6 @@
 package com.ndyar.remind.ui.screens
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -11,6 +12,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -20,6 +22,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.ndyar.remind.model.Reminder
@@ -29,10 +32,10 @@ import com.ndyar.remind.ui.components.ReminderItem
 import androidx.compose.ui.platform.LocalContext
 import com.ndyar.remind.notification.NotificationHelper
 import com.ndyar.remind.notification.ReminderScheduler
-import java.util.Calendar
 
 import androidx.compose.material.icons.filled.Settings
 import com.ndyar.remind.data.SettingsManager
+import com.ndyar.remind.data.ReminderRepository
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -40,15 +43,14 @@ fun ReminderListScreen() {
     val context = LocalContext.current
     val scheduler = remember { ReminderScheduler(context) }
     val settingsManager = remember { SettingsManager(context) }
+    val repository = remember { ReminderRepository(context) }
     
     var currentScreen by remember { mutableStateOf("list") }
     
     val reminders = remember {
-        mutableStateListOf(
-            Reminder(1, "Buy groceries", "Milk, eggs, bread", Calendar.getInstance().apply { set(Calendar.HOUR_OF_DAY, 17); set(Calendar.MINUTE, 0) }.timeInMillis),
-            Reminder(2, "Workout", "Gym session", Calendar.getInstance().apply { set(Calendar.HOUR_OF_DAY, 7); set(Calendar.MINUTE, 0) }.timeInMillis),
-            Reminder(3, "Meeting", "Team sync", Calendar.getInstance().apply { set(Calendar.HOUR_OF_DAY, 10); set(Calendar.MINUTE, 0) }.timeInMillis)
-        )
+        mutableStateListOf<Reminder>().apply {
+            addAll(repository.getReminders())
+        }
     }
 
     var showDialog by remember { mutableStateOf(false) }
@@ -77,29 +79,118 @@ fun ReminderListScreen() {
                 }
             }
         ) { innerPadding ->
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding),
-                contentPadding = PaddingValues(16.dp)
-            ) {
-                items(reminders) { reminder ->
-                    ReminderItem(
-                        reminder = reminder,
-                        onCheckedChange = { isCompleted ->
-                            val index = reminders.indexOf(reminder)
-                            if (index != -1) {
-                                reminders[index] = reminder.copy(isCompleted = isCompleted)
-                            }
-                            if (isCompleted && reminder.isPermanent) {
-                                NotificationHelper(context).cancelNotification(reminder.id)
-                            }
-                        },
-                        onEditClick = {
-                            editingReminder = reminder
-                            showDialog = true
-                        }
+            if (reminders.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "Tidak ada tugas untuk dilakukan",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                }
+            } else {
+                val uncompletedReminders = reminders.filter { !it.isCompleted }
+                val completedReminders = reminders.filter { it.isCompleted }
+
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding),
+                    contentPadding = PaddingValues(16.dp)
+                ) {
+                    if (uncompletedReminders.isNotEmpty()) {
+                        item {
+                            Text(
+                                text = "Belum Selesai",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(vertical = 8.dp)
+                            )
+                        }
+                        items(uncompletedReminders, key = { it.id }) { reminder ->
+                            ReminderItem(
+                                reminder = reminder,
+                                onCheckedChange = { isCompleted ->
+                                    val index = reminders.indexOf(reminder)
+                                    if (index != -1) {
+                                        reminders[index] = reminder.copy(isCompleted = isCompleted)
+                                        repository.saveReminders(reminders)
+                                    }
+                                    if (reminder.isPermanent) {
+                                        if (isCompleted) {
+                                            NotificationHelper(context).cancelNotification(reminder.id)
+                                        } else {
+                                            NotificationHelper(context).showNotification(
+                                                reminder.id,
+                                                reminder.title,
+                                                reminder.description,
+                                                true
+                                            )
+                                        }
+                                    }
+                                },
+                                onEditClick = {
+                                    editingReminder = reminder
+                                    showDialog = true
+                                },
+                                onDeleteClick = {
+                                    reminders.remove(reminder)
+                                    repository.saveReminders(reminders)
+                                    scheduler.cancel(reminder.id)
+                                    NotificationHelper(context).cancelNotification(reminder.id)
+                                }
+                            )
+                        }
+                    }
+
+                    if (completedReminders.isNotEmpty()) {
+                        item {
+                            Text(
+                                text = "Sudah Selesai",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.secondary,
+                                modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
+                            )
+                        }
+                        items(completedReminders, key = { it.id }) { reminder ->
+                            ReminderItem(
+                                reminder = reminder,
+                                onCheckedChange = { isCompleted ->
+                                    val index = reminders.indexOf(reminder)
+                                    if (index != -1) {
+                                        reminders[index] = reminder.copy(isCompleted = isCompleted)
+                                        repository.saveReminders(reminders)
+                                    }
+                                    if (reminder.isPermanent) {
+                                        if (isCompleted) {
+                                            NotificationHelper(context).cancelNotification(reminder.id)
+                                        } else {
+                                            NotificationHelper(context).showNotification(
+                                                reminder.id,
+                                                reminder.title,
+                                                reminder.description,
+                                                true
+                                            )
+                                        }
+                                    }
+                                },
+                                onEditClick = {
+                                    editingReminder = reminder
+                                    showDialog = true
+                                },
+                                onDeleteClick = {
+                                    reminders.remove(reminder)
+                                    repository.saveReminders(reminders)
+                                    scheduler.cancel(reminder.id)
+                                    NotificationHelper(context).cancelNotification(reminder.id)
+                                }
+                            )
+                        }
+                    }
                 }
             }
 
@@ -122,6 +213,7 @@ fun ReminderListScreen() {
                                     deadlineTime = deadlineTime
                                 )
                                 reminders[index] = updatedReminder
+                                repository.saveReminders(reminders)
                                 // Cancel old notification and schedule new one
                                 scheduler.cancel(updatedReminder.id)
                                 scheduler.schedule(updatedReminder)
@@ -138,6 +230,7 @@ fun ReminderListScreen() {
                                 isPermanent = settingsManager.isPermanentDefault
                             )
                             reminders.add(newReminder)
+                            repository.saveReminders(reminders)
                             scheduler.schedule(newReminder)
                         }
                         showDialog = false
